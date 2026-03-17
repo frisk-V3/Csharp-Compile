@@ -3,7 +3,7 @@ name: Tag Release
 on:
   push:
     tags:
-      - "v*"   # v1.0.0 や v2.0.3 などのタグPushでのみ実行
+      - "v*"
 
 jobs:
 
@@ -16,7 +16,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
@@ -53,5 +52,5 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}  # Pushされたタグ名を使用
+          tag_name: ${{ github.ref_name }}
           files: artifacts/**/*
