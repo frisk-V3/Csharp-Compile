@@ -2,12 +2,11 @@ name: Full Auto Release
 
 on:
   push:
-    branches: [ main ]       # mainにpushしたら自動ビルド
-  workflow_dispatch: {}       # 手動でも実行可能
+    branches: [ main ]        # mainにpushで自動ビルド
+  workflow_dispatch: {}        # 手動でも起動可能
 
 jobs:
 
-  # ① 自動タグ生成
   create-tag:
     runs-on: ubuntu-latest
     outputs:
@@ -20,14 +19,15 @@ jobs:
           TAG_NAME="v$(date +'%Y.%m.%d.%H%M')"
           echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
           echo "::set-output name=TAG_NAME::$TAG_NAME"
-      - name: Commit Tag
+      - name: Push Tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git tag ${{ env.TAG_NAME }}
-          git push origin ${{ env.TAG_NAME }}
+          git tag $TAG_NAME
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} $TAG_NAME
 
-  # ② クロスビルド + Packaging
   build:
     needs: create-tag
     strategy:
@@ -37,7 +37,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
@@ -49,7 +48,7 @@ jobs:
         run: dotnet build csharpcompile.sln -c Release
 
       - name: Publish CLI Tool
-        run: dotnet publish src/Cli/csharpcompile.csproj -c Release -o tool
+        run: dotnet publish src/Cli/csharpcompile.csproj -c Release -o tool -r ${{ matrix.rid }} --self-contained true /p:PublishAot=true
 
       - name: Run Builder
         run: dotnet run --project src/Cli/csharpcompile.csproj -- publish --targets ${{ matrix.rid }} --output dist --aot
@@ -60,7 +59,6 @@ jobs:
           name: ${{ matrix.os }}-${{ matrix.rid }}
           path: dist/*
 
-  # ③ GitHub Release作成
   release:
     needs: build
     runs-on: ubuntu-latest
