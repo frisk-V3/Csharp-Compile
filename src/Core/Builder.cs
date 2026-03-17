@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using csharpcompile.Packaging;
 
 namespace csharpcompile.Core;
@@ -9,7 +10,6 @@ public static class Builder
     {
         var info = ProjectInfo.Load(projectPath);
         var targetList = targets.Split(',', StringSplitOptions.RemoveEmptyEntries);
-
         Directory.CreateDirectory(output);
 
         foreach (var target in targetList)
@@ -26,8 +26,7 @@ public static class Builder
 
         var aotArg = aot ? "-p:PublishAot=true" : "";
 
-        var args =
-            $"publish \"{info.ProjectPath}\" -c Release -r {target} --self-contained true {aotArg}";
+        var args = $"publish \"{info.ProjectPath}\" -c Release -r {target} --self-contained true {aotArg}";
 
         var psi = new ProcessStartInfo
         {
@@ -40,16 +39,8 @@ public static class Builder
 
         var process = Process.Start(psi)!;
 
-        process.OutputDataReceived += (_, e) =>
-        {
-            if (e.Data != null) Console.WriteLine(e.Data);
-        };
-
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data != null) Console.WriteLine(e.Data);
-        };
-
+        process.OutputDataReceived += (_, e) => { if (e.Data != null) Console.WriteLine(e.Data); };
+        process.ErrorDataReceived += (_, e) => { if (e.Data != null) Console.WriteLine(e.Data); };
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         process.WaitForExit();
@@ -70,16 +61,28 @@ public static class Builder
         );
 
         var destDir = Path.Combine(output, $"{info.Name}-{target}");
-
-        if (Directory.Exists(destDir))
-            Directory.Delete(destDir, true);
-
+        if (Directory.Exists(destDir)) Directory.Delete(destDir, true);
         DirectoryCopy(publishDir, destDir);
 
-        // Mac .app
+        // macOS .app
         if (target.StartsWith("osx"))
         {
             Platforms.Mac.MacAppBundle.Create(info);
+        }
+
+        // Linux/macOS 実行権限付与
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            foreach (var file in Directory.GetFiles(destDir))
+            {
+                var fi = new FileInfo(file);
+                fi.Attributes |= FileAttributes.Normal;
+                try
+                {
+                    Process.Start("chmod", $"+x {file}")?.WaitForExit();
+                }
+                catch { }
+            }
         }
 
         // パッケージ化
@@ -91,16 +94,10 @@ public static class Builder
     private static void DirectoryCopy(string sourceDir, string destDir)
     {
         Directory.CreateDirectory(destDir);
-
         foreach (var file in Directory.GetFiles(sourceDir))
-        {
             File.Copy(file, Path.Combine(destDir, Path.GetFileName(file)), true);
-        }
 
         foreach (var dir in Directory.GetDirectories(sourceDir))
-        {
-            var newDir = Path.Combine(destDir, Path.GetFileName(dir));
-            DirectoryCopy(dir, newDir);
-        }
+            DirectoryCopy(dir, Path.Combine(destDir, Path.GetFileName(dir)));
     }
 }
