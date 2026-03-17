@@ -4,15 +4,30 @@ namespace csharpcompile.Core;
 
 public static class Builder
 {
-    public static void Publish(string projectPath, string target)
+    public static void PublishMulti(string projectPath, string targets, string output, bool aot)
     {
         var info = ProjectInfo.Load(projectPath);
 
-        Console.WriteLine($"[INFO] Project: {info.Name}");
-        Console.WriteLine($"[INFO] Framework: {info.Framework}");
-        Console.WriteLine($"[INFO] Target: {target}");
+        var targetList = targets.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
-        var args = $"publish \"{info.ProjectPath}\" -c Release -r {target} --self-contained true";
+        Directory.CreateDirectory(output);
+
+        foreach (var target in targetList)
+        {
+            PublishSingle(info, target.Trim(), output, aot);
+        }
+
+        Console.WriteLine("[SUCCESS] All builds completed");
+    }
+
+    private static void PublishSingle(ProjectInfo info, string target, string output, bool aot)
+    {
+        Console.WriteLine($"\n[INFO] Building {target}");
+
+        var aotArg = aot ? "-p:PublishAot=true" : "";
+
+        var args =
+            $"publish \"{info.ProjectPath}\" -c Release -r {target} --self-contained true {aotArg}";
 
         var psi = new ProcessStartInfo
         {
@@ -37,20 +52,51 @@ public static class Builder
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
-
         process.WaitForExit();
 
         if (process.ExitCode != 0)
         {
-            Console.WriteLine("[ERROR] Build failed");
-            Environment.Exit(1);
+            Console.WriteLine($"[ERROR] Failed: {target}");
+            return;
         }
 
-        Console.WriteLine("[SUCCESS] Build complete");
+        var publishDir = Path.Combine(
+            info.ProjectPath,
+            "bin",
+            "Release",
+            info.Framework,
+            target,
+            "publish"
+        );
+
+        var destDir = Path.Combine(output, $"{info.Name}-{target}");
+
+        if (Directory.Exists(destDir))
+            Directory.Delete(destDir, true);
+
+        DirectoryCopy(publishDir, destDir);
 
         if (target.StartsWith("osx"))
         {
             Platforms.Mac.MacAppBundle.Create(info);
+        }
+
+        Console.WriteLine($"[SUCCESS] {target} -> {destDir}");
+    }
+
+    private static void DirectoryCopy(string sourceDir, string destDir)
+    {
+        Directory.CreateDirectory(destDir);
+
+        foreach (var file in Directory.GetFiles(sourceDir))
+        {
+            File.Copy(file, Path.Combine(destDir, Path.GetFileName(file)), true);
+        }
+
+        foreach (var dir in Directory.GetDirectories(sourceDir))
+        {
+            var newDir = Path.Combine(destDir, Path.GetFileName(dir));
+            DirectoryCopy(dir, newDir);
         }
     }
 }
