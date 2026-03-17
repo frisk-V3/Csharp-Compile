@@ -1,0 +1,44 @@
+name: Build csharpcompile
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rid: [win-x64, linux-x64, osx-arm64]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build Tool
+        run: dotnet build src/Cli
+
+      - name: Publish Tool
+        run: dotnet publish src/Cli -c Release -o out
+
+      - name: Run self-test
+        run: |
+          ./out/Cli publish --target ${{ matrix.rid }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.rid }}
+          path: |
+            **/bin/Release/**
