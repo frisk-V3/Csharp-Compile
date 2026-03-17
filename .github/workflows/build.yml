@@ -3,7 +3,7 @@ name: Full Auto Release
 on:
   push:
     branches: [ main ]        # mainにpushで自動ビルド
-  workflow_dispatch: {}        # 手動でも起動可能
+  workflow_dispatch: {}        # 手動でも実行可能
 
 jobs:
 
@@ -13,13 +13,17 @@ jobs:
       tag: ${{ steps.set_tag.outputs.TAG_NAME }}
     steps:
       - uses: actions/checkout@v4
+
       - name: Generate Tag
         id: set_tag
         run: |
           TAG_NAME="v$(date +'%Y.%m.%d.%H%M')"
           echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
           echo "::set-output name=TAG_NAME::$TAG_NAME"
-      - name: Push Tag
+
+      # 安全なPush方法1: GITHUB_TOKEN
+      - name: Push Tag (GITHUB_TOKEN)
+        if: ${{ secrets.GITHUB_TOKEN != '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -27,6 +31,17 @@ jobs:
           git config user.email "actions@github.com"
           git tag $TAG_NAME
           git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} $TAG_NAME
+
+      # 安全なPush方法2: PAT (Fallback)
+      - name: Push Tag (PAT)
+        if: ${{ secrets.PAT != '' && secrets.GITHUB_TOKEN == '' }}
+        env:
+          PAT: ${{ secrets.PAT }}
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git tag $TAG_NAME
+          git push https://$PAT@github.com/${{ github.repository }} $TAG_NAME
 
   build:
     needs: create-tag
@@ -37,6 +52,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
@@ -52,6 +68,10 @@ jobs:
 
       - name: Run Builder
         run: dotnet run --project src/Cli/csharpcompile.csproj -- publish --targets ${{ matrix.rid }} --output dist --aot
+
+      - name: Set execute permission (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: chmod +x dist/${{ matrix.rid }}/*
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
