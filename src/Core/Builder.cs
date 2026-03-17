@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using csharpcompile.Packaging;
 
 namespace csharpcompile.Core;
 
@@ -7,7 +8,6 @@ public static class Builder
     public static void PublishMulti(string projectPath, string targets, string output, bool aot)
     {
         var info = ProjectInfo.Load(projectPath);
-
         var targetList = targets.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
         Directory.CreateDirectory(output);
@@ -76,12 +76,16 @@ public static class Builder
 
         DirectoryCopy(publishDir, destDir);
 
+        // Mac .app
         if (target.StartsWith("osx"))
         {
             Platforms.Mac.MacAppBundle.Create(info);
         }
 
-        Console.WriteLine($"[SUCCESS] {target} -> {destDir}");
+        // パッケージ化
+        Packager.Create(destDir, destDir);
+
+        Console.WriteLine($"[SUCCESS] {target}");
     }
 
     private static void DirectoryCopy(string sourceDir, string destDir)
