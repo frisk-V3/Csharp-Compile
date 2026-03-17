@@ -1,55 +1,19 @@
-name: Full Auto Release
+name: Tag Release
 
 on:
   push:
-    branches: [ main ]        # mainにpushで自動ビルド
-  workflow_dispatch: {}        # 手動でも実行可能
+    tags:
+      - "v*"   # v1.0.0 や v2.0.3 などのタグPushでのみ実行
 
 jobs:
 
-  create-tag:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.set_tag.outputs.TAG_NAME }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Generate Tag
-        id: set_tag
-        run: |
-          TAG_NAME="v$(date +'%Y.%m.%d.%H%M')"
-          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
-          echo "::set-output name=TAG_NAME::$TAG_NAME"
-
-      # 安全なPush方法1: GITHUB_TOKEN
-      - name: Push Tag (GITHUB_TOKEN)
-        if: ${{ secrets.GITHUB_TOKEN != '' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git tag $TAG_NAME
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} $TAG_NAME
-
-      # 安全なPush方法2: PAT (Fallback)
-      - name: Push Tag (PAT)
-        if: ${{ secrets.PAT != '' && secrets.GITHUB_TOKEN == '' }}
-        env:
-          PAT: ${{ secrets.PAT }}
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git tag $TAG_NAME
-          git push https://$PAT@github.com/${{ github.repository }} $TAG_NAME
-
   build:
-    needs: create-tag
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         rid: [win-x64, linux-x64, osx-arm64]
-    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -89,5 +53,5 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.create-tag.outputs.tag }}
+          tag_name: ${{ github.ref_name }}  # Pushされたタグ名を使用
           files: artifacts/**/*
