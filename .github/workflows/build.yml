@@ -1,9 +1,9 @@
-name: Build csharpcompile
+name: Release
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
+    tags:
+      - "v*"
 
 jobs:
   build:
@@ -15,30 +15,41 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore
-        run: dotnet restore
+      - run: dotnet restore
 
-      - name: Build Tool
-        run: dotnet build src/Cli
+      - run: dotnet build src/Cli
 
       - name: Publish Tool
-        run: dotnet publish src/Cli -c Release -o out
+        run: dotnet publish src/Cli -c Release -o tool
 
-      - name: Run self-test
+      - name: Run builder
         run: |
-          ./out/Cli publish --target ${{ matrix.rid }}
+          dotnet run --project src/Cli -- publish \
+            --targets ${{ matrix.rid }} \
+            --output dist \
+            --aot
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.os }}-${{ matrix.rid }}
-          path: |
-            **/bin/Release/**
+          name: ${{ matrix.os }}-${{ matrix.rid }}
+          path: dist/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
