@@ -1,41 +1,56 @@
-name: Release
+name: Full Release
 
 on:
+  workflow_dispatch: {}       # 手動でも実行可能
   push:
     tags:
-      - "v*"
+      - "v*"                # タグ push 時も自動で走る
 
 jobs:
+
+  create-tag:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set auto version tag
+        id: vars
+        run: echo "RELEASE_TAG=v$(date +'%Y.%m.%d.%H%M')" >> $GITHUB_ENV
+      - name: Create Git tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git tag $RELEASE_TAG
+          git push origin $RELEASE_TAG
+
   build:
+    needs: [create-tag]
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         rid: [win-x64, linux-x64, osx-arm64]
-
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      - run: dotnet restore
+      - name: Restore
+        run: dotnet restore csharpcompile.sln
 
-      - run: dotnet build src/Cli
+      - name: Build Solution
+        run: dotnet build csharpcompile.sln -c Release
 
-      - name: Publish Tool
-        run: dotnet publish src/Cli -c Release -o tool
+      - name: Publish CLI Tool
+        run: dotnet publish src/Cli/csharpcompile.csproj -c Release -o tool
 
-      - name: Run builder
-        run: |
-          dotnet run --project src/Cli -- publish \
-            --targets ${{ matrix.rid }} \
-            --output dist \
-            --aot
+      - name: Run Builder
+        run: dotnet run --project src/Cli/csharpcompile.csproj -- publish --targets ${{ matrix.rid }} --output dist --aot
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.rid }}
           path: dist/*
@@ -43,13 +58,11 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
