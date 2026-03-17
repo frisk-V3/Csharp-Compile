@@ -6,9 +6,13 @@ public static class Builder
 {
     public static void Publish(string projectPath, string target)
     {
-        Console.WriteLine($"[INFO] Publishing {projectPath} -> {target}");
+        var info = ProjectInfo.Load(projectPath);
 
-        var args = $"publish \"{projectPath}\" -c Release -r {target} --self-contained true";
+        Console.WriteLine($"[INFO] Project: {info.Name}");
+        Console.WriteLine($"[INFO] Framework: {info.Framework}");
+        Console.WriteLine($"[INFO] Target: {target}");
+
+        var args = $"publish \"{info.ProjectPath}\" -c Release -r {target} --self-contained true";
 
         var psi = new ProcessStartInfo
         {
@@ -19,14 +23,13 @@ public static class Builder
             UseShellExecute = false
         };
 
-        var process = Process.Start(psi);
+        var process = Process.Start(psi)!;
 
-        process.OutputDataReceived += (s, e) => Console.WriteLine(e.Data);
-        process.ErrorDataReceived += (s, e) => Console.WriteLine(e.Data);
+        process.OutputDataReceived += (_, e) => { if (e.Data != null) Console.WriteLine(e.Data); };
+        process.ErrorDataReceived += (_, e) => { if (e.Data != null) Console.WriteLine(e.Data); };
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
-
         process.WaitForExit();
 
         if (process.ExitCode != 0)
@@ -37,10 +40,10 @@ public static class Builder
 
         Console.WriteLine("[SUCCESS] Build complete");
 
-        // Macだけ特別処理
+        // Mac処理（強化版）
         if (target.StartsWith("osx"))
         {
-            Platforms.Mac.MacAppBundle.Create(projectPath, target);
+            Platforms.Mac.MacAppBundle.Create(info);
         }
     }
 }
