@@ -6,22 +6,17 @@ public static class MacAppBundle
 {
     public static void Create(ProjectInfo info)
     {
-        Console.WriteLine("[INFO] Creating .app bundle...");
-
-        var publishRoot = Path.Combine(
+        var baseDir = Path.Combine(
             info.ProjectPath,
             "bin",
             "Release",
             info.Framework
         );
 
-        var ridDir = Directory.GetDirectories(publishRoot).FirstOrDefault();
+        var ridDir = Directory.GetDirectories(baseDir)
+            .FirstOrDefault(x => x.Contains("osx"));
 
-        if (ridDir == null)
-        {
-            Console.WriteLine("[WARN] RID directory not found");
-            return;
-        }
+        if (ridDir == null) return;
 
         var publishDir = Path.Combine(ridDir, "publish");
 
@@ -33,12 +28,11 @@ public static class MacAppBundle
 
         foreach (var file in Directory.GetFiles(publishDir))
         {
-            var dest = Path.Combine(macos, Path.GetFileName(file));
-            File.Copy(file, dest, true);
+            File.Copy(file, Path.Combine(macos, Path.GetFileName(file)), true);
         }
 
-        var plist = $@"<?xml version=""1.0"" encoding=""UTF-8""?>
-<!DOCTYPE plist PUBLIC ""-//Apple//DTD PLIST 1.0//EN"">
+        File.WriteAllText(Path.Combine(contents, "Info.plist"), $@"
+<?xml version=""1.0"" encoding=""UTF-8""?>
 <plist version=""1.0"">
 <dict>
     <key>CFBundleName</key>
@@ -46,10 +40,6 @@ public static class MacAppBundle
     <key>CFBundleExecutable</key>
     <string>{info.Name}</string>
 </dict>
-</plist>";
-
-        File.WriteAllText(Path.Combine(contents, "Info.plist"), plist);
-
-        Console.WriteLine($"[SUCCESS] {info.Name}.app created");
+</plist>");
     }
 }
