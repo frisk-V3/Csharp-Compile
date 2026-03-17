@@ -5,25 +5,43 @@ var root = new RootCommand("csharpcompile - cross platform builder");
 
 var publish = new Command("publish", "Publish project");
 
-var targetOption = new Option<string>(
-    "--target",
+// 複数ターゲット
+var targetsOption = new Option<string>(
+    "--targets",
     () => "win-x64",
-    "Runtime Identifier (RID)"
+    "Comma separated RIDs"
 );
 
+// 出力先
+var outputOption = new Option<string>(
+    "--output",
+    () => "dist",
+    "Output directory"
+);
+
+// プロジェクト
 var projectOption = new Option<string>(
     "--project",
     () => ".",
-    "Path to project or folder"
+    "Project path"
 );
 
-publish.AddOption(targetOption);
-publish.AddOption(projectOption);
+// AOT
+var aotOption = new Option<bool>(
+    "--aot",
+    () => false,
+    "Enable NativeAOT"
+);
 
-publish.SetHandler((target, project) =>
+publish.AddOption(targetsOption);
+publish.AddOption(outputOption);
+publish.AddOption(projectOption);
+publish.AddOption(aotOption);
+
+publish.SetHandler((targets, output, project, aot) =>
 {
-    Builder.Publish(project, target);
-}, targetOption, projectOption);
+    Builder.PublishMulti(project, targets, output, aot);
+}, targetsOption, outputOption, projectOption, aotOption);
 
 root.AddCommand(publish);
 
