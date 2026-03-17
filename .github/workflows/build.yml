@@ -1,38 +1,43 @@
-name: Full Release
+name: Full Auto Release
 
 on:
-  workflow_dispatch: {}       # 手動でも実行可能
   push:
-    tags:
-      - "v*"                # タグ push 時も自動で走る
+    branches: [ main ]       # mainにpushしたら自動ビルド
+  workflow_dispatch: {}       # 手動でも実行可能
 
 jobs:
 
+  # ① 自動タグ生成
   create-tag:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    outputs:
+      tag: ${{ steps.set_tag.outputs.TAG_NAME }}
     steps:
       - uses: actions/checkout@v4
-      - name: Set auto version tag
-        id: vars
-        run: echo "RELEASE_TAG=v$(date +'%Y.%m.%d.%H%M')" >> $GITHUB_ENV
-      - name: Create Git tag
+      - name: Generate Tag
+        id: set_tag
+        run: |
+          TAG_NAME="v$(date +'%Y.%m.%d.%H%M')"
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "::set-output name=TAG_NAME::$TAG_NAME"
+      - name: Commit Tag
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git tag $RELEASE_TAG
-          git push origin $RELEASE_TAG
+          git tag ${{ env.TAG_NAME }}
+          git push origin ${{ env.TAG_NAME }}
 
+  # ② クロスビルド + Packaging
   build:
-    needs: [create-tag]
+    needs: create-tag
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         rid: [win-x64, linux-x64, osx-arm64]
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
@@ -55,6 +60,7 @@ jobs:
           name: ${{ matrix.os }}-${{ matrix.rid }}
           path: dist/*
 
+  # ③ GitHub Release作成
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -65,4 +71,5 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.create-tag.outputs.tag }}
           files: artifacts/**/*
